@@ -1,18 +1,10 @@
-import kivy
-from kivy.app import App
-from kivy.lang import Builder
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.filechooser import FileChooserListView
-from kivy.properties import StringProperty
-from kivy_garden.mapview import MapView, MapMarkerPopup
-from kivy_garden.mapview.geojson import GeoJsonMapLayer, MapLayer
-from gi.repository import Gst
-import cv2
 import time
 
-
-
-kivy.require('2.0.0')
+from kivy.lang import Builder
+from kivymd.app import MDApp
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.filemanager import MDFileManager
+from kivy_garden.mapview.geojson import GeoJsonMapLayer
 
 Builder.load_string('''
 <CameraClick>:
@@ -22,47 +14,29 @@ Builder.load_string('''
         lat: 0
         lon: 0
         zoom: 14
-    FileChooserListView:
-        id: filechooser
-        on_selection: root.load_map()
-    Camera:
-        id: camera
-        resolution: (1920, 1080)
-        play: False
-    ToggleButton:
-        text: 'Play'
-        on_press:
-            camera.play = not camera.play
-            if camera.play: root.start_gps()
-            else: root.stop_gps()
+    MDRectangleFlatButton:
+        text: 'Select Map'
+        on_release: root.open_file_manager()
         size_hint_y: None
         height: '48dp'
-    Button:
-        text: 'Capture'
-        size_hint_y: None
-        height: '48dp'
-        on_release: root.capture()
+
 ''')
 
 
-class CameraClick(BoxLayout):
-    map_filename = StringProperty()
+class CameraClick(MDBoxLayout):
+    map_filename = ""
 
-    def start_gps(self):
-        mapview = self.ids.mapview
-        mapview.start()
+    def open_file_manager(self):
+        file_manager = MDFileManager(exit_manager=self.exit_file_manager, select_path=self.select_path)
+        file_manager.show()
 
-    def stop_gps(self):
-        mapview = self.ids.mapview
-        mapview.stop()
+    def exit_file_manager(self, *args):
+        self.file_manager.close()
 
-    def load_map(self):
-        filechooser = self.ids.filechooser
-        selected_file = filechooser.selection and filechooser.selection[0]
-        if selected_file:
-            print("Selected Map:", selected_file)
-            self.map_filename = selected_file
-            self.load_geojson()
+    def select_path(self, path):
+        self.map_filename = path
+        self.load_geojson()
+        self.file_manager.close()
 
     def load_geojson(self):
         mapview = self.ids.mapview
@@ -75,27 +49,14 @@ class CameraClick(BoxLayout):
             except Exception as e:
                 print("Error loading GeoJSON:", e)
 
-    def capture(self):
-        '''
-        Function to capture the images and give them names
-        based on the captured time and date.
-        '''
-        camera = self.ids.camera
-        timestr = time.strftime("%Y%m%d_%H%M%S")
-        filename = f"IMG_{timestr}.png"
-        camera.export_to_png(filename)
-        print(f"Captured image: {filename}")
 
-
-class TestCamera(App):
+class TestCamera(MDApp):
     def build(self):
         return CameraClick()
 
 
 if __name__ == "__main__":
     try:
-        from kivy.config import Config
-        Config.set('kivy', 'log_level', 'debug')
         TestCamera().run()
     except Exception as e:
         print(f"An error occurred: {str(e)}")
