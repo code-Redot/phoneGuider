@@ -1,62 +1,84 @@
-import time
 
-from kivy.lang import Builder
-from kivymd.app import MDApp
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.filemanager import MDFileManager
-from kivy_garden.mapview.geojson import GeoJsonMapLayer
+from kivy.uix.image import Image
+from kivy.app import App
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.label import Label
+from kivy.uix.button import Button
+from plyer import gps
+from jnius import autoclass
+from kivy.uix.camera import Camera
 
-Builder.load_string('''
-<CameraClick>:
-    orientation: 'vertical'
-    MapView:
-        id: mapview
-        lat: 0
-        lon: 0
-        zoom: 14
-    MDRectangleFlatButton:
-        text: 'Select Map'
-        on_release: root.open_file_manager()
-        size_hint_y: None
-        height: '48dp'
-
-''')
-
-
-class CameraClick(MDBoxLayout):
-    map_filename = ""
-
-    def open_file_manager(self):
-        file_manager = MDFileManager(exit_manager=self.exit_file_manager, select_path=self.select_path)
-        file_manager.show()
-
-    def exit_file_manager(self, *args):
-        self.file_manager.close()
-
-    def select_path(self, path):
-        self.map_filename = path
-        self.load_geojson()
-        self.file_manager.close()
-
-    def load_geojson(self):
-        mapview = self.ids.mapview
-        mapview.remove_layer("geojson")
-        if self.map_filename:
-            try:
-                geojson_layer = GeoJsonMapLayer(source=self.map_filename, name="geojson")
-                mapview.add_layer(geojson_layer)
-                mapview.center_on(*geojson_layer.bbox.center, zoom=14)
-            except Exception as e:
-                print("Error loading GeoJSON:", e)
-
-
-class TestCamera(MDApp):
+class CameraApp(App):
     def build(self):
-        return CameraClick()
+        # Request location permission if running on Android
+        if self.is_android():
+            self.request_android_permissions()
+
+        layout = FloatLayout()
+
+        # Check if the device has any cameras available
+        if Camera.ids:
+            # Create camera widget using the first camera (index 0)
+            camera = Camera(index=-1)
+            layout.add_widget(camera)
+        else:
+            print("No camera available on this device.")
+
+        # Create label widget for displaying GPS coordinates
+        self.label = Label(text="GPS Coordinates: ")
+        layout.add_widget(self.label)
+
+        # Create button widget for taking a photo
+        button = Button(text="Take Photo", size_hint=(0.2, 0.1), pos_hint={'x': 0.4, 'y': 0.1})
+        button.bind(on_release=self.take_photo)
+        layout.add_widget(button)
+
+        # Start GPS updates
+        gps.configure(on_location=self.on_location)
+        gps.start()
+
+        return layout
 
 
-if __name__ == "__main__":
-    try:
-        TestCamera().run()
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+    def is_android(self):
+        try:
+            from jnius import autoclass, jnius_config
+            return jnius_config.vm_name == 'Dalvik'
+        except ImportError:
+            return False
+
+    def request_android_permissions(self):
+        from android.permissions import request_permissions, Permission
+
+        permissions = [Permission.CAMERA, Permission.ACCESS_FINE_LOCATION]
+        request_permissions(permissions)
+
+    def take_photo(self, instance):
+        # Capture photo
+        camera = self.root.children[0]
+        camera.export_to_png("photo.png")
+
+    def on_location(self, **kwargs):
+        # Update label with GPS coordinates
+        self.label.text = "GPS Coordinates: {} {}".format(kwargs['lat'], kwargs['lon'])
+
+    def update_arrow_angle(self, dt):
+        # Get the orientation (in degrees) from the GPS or any other method you prefer
+        # For demonstration purposes, we'll use a static value of 45 degrees here
+        orientation = 45
+
+        # Update the arrow widget with the new angle
+        self.arrow.update_arrow(orientation)
+
+class ArrowImage(Image):
+    def __init__(self, **kwargs):
+        super(ArrowImage, self).__init__(**kwargs)
+        self.source = 'arrow_ahead_1.png'
+        self.angle = 0
+
+    def update_arrow(self, orientation):
+        # Update the arrow's angle based on the user's orientation
+        self.angle = orientation
+
+if __name__ == '__main__':
+    CameraApp().run()
